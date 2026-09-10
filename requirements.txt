@@ -1,0 +1,10 @@
+opencv-python
+PyYAML
+pytest
+numpy
+ultralytics==8.4.144
+supervision==0.25.0
+gradio>=5.0,<7.0
+pandas>=2.0
+plotly>=5.18
+imageio-ffmpeg>=0.5

@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+data/videos/*
+!data/videos/.gitkeep
+data/events/*
+!data/events/.gitkeep
+
+weights/
+*.pt
+*.pth
+*.onnx
+*.db
