@@ -1,6 +1,6 @@
 # Solution Design
 
-> Technical architecture source of truth — **Architecture Freeze v0.1**. Phạm vi/hành vi theo [Requirements](requirements.md). README chỉ là bản tóm tắt. Phase 1 xây dựng code skeleton; Phase 2 tích hợp detector pretrained và baseline.
+> Technical architecture source of truth — **Architecture Freeze v0.2**. Phạm vi/hành vi theo [Requirements](requirements.md). README chỉ là bản tóm tắt.
 
 ## 1. Design Principles
 
@@ -27,9 +27,7 @@ Tracker
  ↓
 Zone Manager
  ↓
-Stationary Detector
- ↓
-Dwell Timer
+Inside Frame Counter
  ↓
 State Machine
  ↓
@@ -40,7 +38,9 @@ Deduplicator
 Event Storage
 ```
 
-Frame Provider đọc video file từ camera cố định và cung cấp timestamp theo giây. Track history phục vụ Stationary Detector. `person` chỉ đi qua detection/tracking và context; nhánh violation chỉ xử lý `VEHICLE_CLASSES`.
+Frame Provider đọc video file từ camera cố định và cung cấp timestamp theo giây.
+Inside Frame Counter đếm quan sát liên tiếp theo track. `person` chỉ đi qua
+detection/tracking và context; nhánh violation chỉ xử lý `VEHICLE_CLASSES`.
 
 ---
 
@@ -64,8 +64,7 @@ src/
 │   ├── geometry.py
 │   └── auto_roi.py
 ├── violation/
-│   ├── stationary.py
-│   ├── dwell_timer.py
+│   ├── inside_frame_counter.py
 │   ├── state_machine.py
 │   ├── rule_engine.py
 │   └── deduplicator.py
@@ -198,57 +197,32 @@ Future:
 
 ---
 
-## 8. Stationary Detection
+## 8. Shapely Zone Membership
 
-Mỗi track duy trì trajectory:
-
-```text
-[(t0,x0,y0), (t1,x1,y1), ...]
-```
-
-Trong một sliding window:
-
-```text
-displacement = distance(first_point, last_point)
-```
-
-Nếu:
-
-```text
-displacement <= max_displacement_px
-```
-
-thì stationary candidate, chỉ sau khi đã có đủ lịch sử `window_sec`. Trajectory dùng bottom-center. Đây là baseline displacement; failure analysis cần kiểm tra trường hợp di chuyển rồi quay về gần điểm đầu.
-
-Để tăng robustness có thể dùng:
-
-- median center;
-- average pairwise displacement;
-- normalized movement theo bbox size;
-- perspective-aware threshold trong future.
+Mỗi polygon được tạo và kiểm tra tính hợp lệ bằng Shapely. Membership dùng
+`Polygon.covers(Point(bottom_center))`, vì vậy điểm nằm trên biên cũng được tính
+là inside. Polygon Shapely được cache theo zone, không dựng lại ở mỗi frame.
 
 ---
 
-## 9. Dwell-Time Logic
+## 9. Consecutive Inside-Frame Validation
 
 Các timestamp cần lưu:
 
 ```text
 entered_at
-stationary_since
-last_seen_at
 left_at
 ```
 
-Dwell time:
+Mỗi quan sát hợp lệ của cùng `track_id` trong cùng target zone tăng bộ đếm:
 
 ```text
-current_time - stationary_since
+inside_frame_count += 1
 ```
 
-Dùng timestamp media theo giây, không dùng wall-clock xử lý hoặc frame count để so với threshold. Khi media không có timestamp hợp lệ, Frame Provider có thể suy ra giây từ chỉ số frame và FPS thực của video; phải log fallback và từ chối video có cả timestamp lẫn FPS không hợp lệ.
-
-Dwell Timer chỉ tích lũy khi stationary trong target zone hiệu lực, ngoài ALLOWED/IGNORE. `stationary_since` là đầu cửa sổ được xác nhận stationary, không sớm hơn `entered_at`. Moving, ra target zone hoặc vào ALLOWED/IGNORE làm reset dwell; grace chỉ giữ lifecycle, không cho phát event khi thiếu quan sát. Track mất tạm thời không được tăng dwell hoặc phát candidate; khi xuất hiện lại phải xác nhận stationary bằng cửa sổ quan sát mới. Đổi target zone bắt đầu dwell mới.
+Ra target zone, vào ALLOWED/IGNORE, đổi target zone hoặc mất track sẽ reset bộ
+đếm. Candidate được tạo khi `inside_frame_count >= min_inside_frames`. Timestamp
+video vẫn được lưu phục vụ audit, nhưng không quyết định threshold violation.
 
 ---
 
@@ -261,11 +235,8 @@ OUTSIDE
 ENTERING
   │ stable inside
   ↓
-INSIDE_MOVING
-  │ stationary
-  ↓
-STATIONARY
-  │ temporal candidate: dwell >= min_dwell_time_sec
+INSIDE_PENDING
+  │ inside_frame_count >= min_inside_frames
   ↓
 SUSPECTED_VIOLATION
   │ Rule Engine accepts + dedup allows + storage succeeds
@@ -275,7 +246,9 @@ ALERTED
 
 `SUSPECTED_VIOLATION` là trạng thái candidate nội bộ, không phải tên event. Rule Engine quyết định rule cuối cùng; chỉ chuyển `ALERTED` sau khi lưu event/snapshot thành công. Candidate bị dedup không tạo event mới.
 
-Moving làm `STATIONARY → INSIDE_MOVING` và reset dwell. `ENTERING` xác nhận inside ở quan sát hợp lệ tiếp theo. `ALERTED` giữ lock đến khi episode đóng. Sau CLOSED, lần vào lại bắt đầu episode mới và vẫn qua cooldown.
+`ENTERING` bắt đầu ở frame hợp lệ đầu tiên. `INSIDE_PENDING` giữ trạng thái cho
+đến khi đủ N frame. `ALERTED` giữ lock đến khi episode đóng. Sau CLOSED, lần vào
+lại bắt đầu episode mới và vẫn qua cooldown.
 
 Exit transition:
 
@@ -297,8 +270,7 @@ object.class ∈ VEHICLE_CLASSES
 AND object is inside SIDEWALK or MONITORED zone
 AND object is NOT inside ALLOWED zone
 AND object is NOT inside IGNORE zone
-AND object is stationary
-AND stationary_duration >= min_dwell_time_sec
+AND consecutive_inside_frames >= min_inside_frames
 → SUSPECTED_AREA_OCCUPATION
 ```
 
@@ -353,6 +325,7 @@ stationary_since
 violation_at
 left_at
 dwell_time_sec
+inside_frame_count
 confidence
 snapshot_path
 status
@@ -362,7 +335,12 @@ model_version
 
 ---
 
-Các mốc thời gian là REAL seconds trên timeline video; `left_at` nullable khi OPEN. `event_id` là khóa chính duy nhất; `event_type`, `zone_type`, source IDs, class, version và snapshot path là TEXT; `track_id` là INTEGER. `status` là OPEN/CLOSED. `dwell_time_sec` ghi duration tại thời điểm phát event; `confidence` là detection confidence, không phải xác suất vi phạm. Snapshot phải được ghi thành công trước khi commit event. Lỗi storage không đánh dấu ALERTED và phải được log. Cuối video đóng episode đang mở; `left_at` để null nếu chưa quan sát được việc rời vùng. Video clip và overlap không thuộc schema MVP.
+`inside_frame_count` là bằng chứng chính cho threshold N-frame. Hai cột
+`stationary_since` và `dwell_time_sec` được giữ trong SQLite để tương thích schema
+cũ; chúng lần lượt chứa thời điểm bắt đầu chuỗi inside và khoảng thời gian media
+từ lúc vào ROI đến lúc tạo event, không tham gia quyết định violation.
+`confidence` là detection confidence, không phải xác suất vi phạm. Snapshot phải
+được ghi thành công trước khi commit event. Lỗi storage không đánh dấu ALERTED.
 
 ## 14. Pipeline Orchestration
 
@@ -379,15 +357,14 @@ for frame, timestamp in frame_provider:
         if track.class_name not in VEHICLE_CLASSES:
             continue  # person: context only
         zone_context = zone_manager.evaluate(track)
-        motion = stationary_detector.update(track, timestamp)
-        dwell = dwell_timer.update(track, zone_context, motion, timestamp)
-        state = state_machine.update(track, zone_context, motion, dwell, timestamp)
+        inside = inside_frame_counter.update(track, zone_context, timestamp)
+        state = state_machine.update(track, zone_context, inside.consecutive_frames, timestamp)
 
         candidate = rule_engine.evaluate(
             track=track,
             zone_context=zone_context,
             state=state,
-            stationary_duration=dwell,
+            inside_frame_count=inside.consecutive_frames,
             timestamp=timestamp,
         )
 
@@ -419,13 +396,9 @@ tracking:
 zones:
   path: configs/zones/cam01.json
 
-stationary:
-  window_sec: 3
-  max_displacement_px: 15
-
 violation:
   target_classes: [motorcycle, bicycle, car, bus, truck]
-  min_dwell_time_sec: 30
+  min_inside_frames: 30
   exit_grace_sec: 3
 
 dedup:
@@ -463,20 +436,20 @@ Các phần viết mới:
 
 - detector abstraction;
 - sidewalk/monitored/allowed/ignore semantics;
-- stationary detection;
-- dwell-time logic theo seconds;
+- Shapely point-in-polygon;
+- consecutive inside-frame validation;
 - violation rules;
 - event schema;
 - evaluation data.
 
-## 17. Architecture Freeze v0.1
+## 17. Architecture Freeze v0.2
 
 | Decision | Chốt |
 |---|---|
 | Input MVP | Video file |
 | Camera | Fixed-view |
 | Detector architecture | Replaceable, detector-agnostic |
-| Detector baseline | Phase 2 ưu tiên YOLOX hoặc RTMDet; weights cụ thể chốt khi chạy baseline |
+| Detector baseline | YOLO11n pretrained COCO (`weights/yolo11n.pt`) |
 | Classes | person + motorcycle, bicycle, car, bus, truck |
 | person | Context only, detection/tracking, không violation evaluation |
 | Tracker | ByteTrack |
@@ -484,8 +457,8 @@ Các phần viết mới:
 | ROI membership | Bottom-center |
 | Zones | SIDEWALK / MONITORED / ALLOWED / IGNORE |
 | Zone precedence | IGNORE > ALLOWED > SIDEWALK / MONITORED |
-| Stationary | Trajectory displacement |
-| Time unit | Seconds |
+| Zone geometry | Shapely `Polygon.covers(Point)` |
+| Violation threshold | Consecutive tracked frames inside ROI |
 | State management | Per-track state machine |
 | Violation logic | Separate Rule Engine (ViolationEngine) |
 | Dedup | Track lock + cooldown + spatial |

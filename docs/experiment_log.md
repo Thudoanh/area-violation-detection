@@ -107,6 +107,17 @@ dedup:
 
 # Experiment History
 
+## EXP-009 — Shapely + Consecutive N-frame Architecture
+
+**Date:** 2026-09-11.
+**Change:** Giữ YOLO11n pretrained COCO và ByteTrack; thay OpenCV
+`pointPolygonTest` bằng Shapely `Polygon.covers(Point)`; thay stationary detector
+và dwell-time threshold bằng bộ đếm `min_inside_frames` liên tiếp theo track/zone.
+Bộ đếm reset khi ra ROI, vào ALLOWED/IGNORE, đổi zone hoặc mất track. Giữ
+per-track lock, cooldown và spatial deduplication. Ngưỡng khởi tạo là 30 frame và
+cần tune theo FPS/dataset thực tế. Các cột thời gian cũ trong SQLite được giữ để
+tương thích dữ liệu.
+
 ## EXP-008 — Vietnamese Web Demo + ROI Suggestion
 
 **Date:** 2026-09-10.  

@@ -10,7 +10,7 @@ def sample_event():
         "camera_id": "WEB_DEMO", "zone_id": "WEB_ROI", "zone_type": "SIDEWALK",
         "track_id": 7, "object_class": "car", "entered_at": 10.0,
         "stationary_since": 12.0, "violation_at": 75.4, "left_at": None,
-        "dwell_time_sec": 30.0, "confidence": 0.8764,
+        "dwell_time_sec": 30.0, "inside_frame_count": 30, "confidence": 0.8764,
         "snapshot_path": "missing.jpg", "status": "CLOSED",
         "config_version": "cfg", "model_version": "model",
         "event_type": "SUSPECTED_AREA_OCCUPATION",

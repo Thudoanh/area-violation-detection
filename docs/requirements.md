@@ -1,6 +1,6 @@
 # Requirements
 
-> Functional requirements source of truth — **Frozen MVP v0.1**. Technical architecture: [Solution Design](solution_design.md). Phase 1 xây dựng code skeleton; Phase 2 tích hợp detector pretrained và baseline.
+> Functional requirements source of truth — **Frozen MVP v0.2**. Technical architecture: [Solution Design](solution_design.md).
 
 ## 1. Functional Requirements
 
@@ -52,15 +52,15 @@ MVP dùng bottom-center point; điểm trên biên polygon tính là inside.
 
 Precedence: `IGNORE > ALLOWED > SIDEWALK / MONITORED`. Object trong `SIDEWALK + ALLOWED` không sinh event. Bbox/mask overlap để giai đoạn sau.
 
-### FR-06 — Stationary Detection
+### FR-06 — Consecutive Inside-Frame Validation
 
-Hệ thống phải xác định object đang di chuyển hay đứng yên từ trajectory theo thời gian.
+Hệ thống phải đếm số frame quan sát liên tiếp mà bottom-center của cùng một track
+nằm trong target zone hiệu lực. Ra vùng, vào ALLOWED/IGNORE, đổi zone hoặc mất
+track phải reset bộ đếm.
 
-### FR-07 — Dwell Time
+### FR-07 — Configurable Frame Threshold
 
-Hệ thống phải đo thời gian object đứng yên trong monitored zone.
-
-Dwell time phải dựa trên timestamp/seconds, không phụ thuộc trực tiếp vào số frame.
+Hệ thống chỉ tạo candidate khi `inside_frame_count >= min_inside_frames`.
 
 ### FR-08 — State Machine
 
@@ -68,8 +68,7 @@ Mỗi vehicle track được đánh giá vi phạm phải có trạng thái đ�
 
 - OUTSIDE
 - ENTERING
-- INSIDE_MOVING
-- STATIONARY
+- INSIDE_PENDING
 - SUSPECTED_VIOLATION
 - ALERTED
 - CLOSED
@@ -83,8 +82,7 @@ object.class ∈ VEHICLE_CLASSES
 AND object is inside SIDEWALK or MONITORED zone
 AND object is NOT inside ALLOWED zone
 AND object is NOT inside IGNORE zone
-AND object is stationary
-AND stationary_duration >= min_dwell_time_sec
+AND consecutive_inside_frames >= min_inside_frames
 → SUSPECTED_AREA_OCCUPATION
 ```
 
@@ -118,9 +116,7 @@ Phải đọc từ config:
 
 - detector confidence;
 - detection classes và violation target classes (hai tập riêng);
-- stationary window;
-- stationary movement threshold;
-- minimum dwell time;
+- minimum consecutive inside frames;
 - exit grace time;
 - cooldown;
 - spatial dedup distance.
@@ -190,12 +186,8 @@ Các giá trị dưới đây chỉ là initial values để thử nghiệm:
 detector:
   confidence_threshold: 0.4
 
-stationary:
-  window_sec: 3
-  max_displacement_px: 15
-
 violation:
-  min_dwell_time_sec: 30
+  min_inside_frames: 30
   exit_grace_sec: 3
 
 dedup:
@@ -209,7 +201,7 @@ Các threshold này phải được tune bằng experiment.
 
 ## 4. Scope và các giá trị còn TBD
 
-MVP chỉ xét vehicle occupation: phương tiện đứng yên đủ lâu trong vùng hợp lệ. Input là video file camera cố định; ROI polygon thủ công; output là event và snapshot.
+MVP chỉ xét vehicle occupation: phương tiện được track liên tiếp đủ số frame trong vùng hợp lệ. Input là video file camera cố định; ROI polygon thủ công; output là event và snapshot.
 
 Ngoài MVP: RTSP, multi-camera đồng thời, allowed-zone schedule, street vending, bàn ghế, hàng hóa, biển quảng cáo, vật liệu xây dựng, behavior recognition, OCR biển số, nhận diện khuôn mặt, automatic sidewalk segmentation, PTZ và xử phạt tự động. Clip optional ở giai đoạn sau.
 
@@ -220,7 +212,7 @@ Còn TBD: nguồn video, resolution/FPS, số lượng/split dataset, backend/we
 - Frame Provider trả frame và timestamp theo giây trên timeline video.
 - Detector trả `list[Detection]`: bbox pixel xyxy, confidence và class chuẩn hóa.
 - ByteTrack adapter nhận detections, frame, timestamp và trả `list[TrackedObject]` có ID, class, bbox, confidence, timestamp.
-- Zone Manager trả membership và precedence; Stationary Detector trả motion; Dwell Timer trả stationary duration theo giây.
+- Zone Manager dùng Shapely và trả membership/precedence; Inside Frame Counter trả số frame liên tiếp trong target zone.
 - State Machine quản lý trạng thái per-track; Rule Engine riêng trả candidate hoặc không có event; Deduplicator quyết định phát event; Storage lưu metadata và snapshot.
 
 Data models và lifecycle chi tiết theo [Solution Design](solution_design.md).

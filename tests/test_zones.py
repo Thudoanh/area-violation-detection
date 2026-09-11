@@ -31,6 +31,12 @@ def test_concave_polygon():
     assert not point_in_polygon((50, 50), polygon)
 
 
+def test_self_intersecting_polygon_is_rejected_by_shapely():
+    with pytest.raises(ValueError, match="valid"):
+        ZoneManager("CAM", [Zone("BAD", "CAM", "SIDEWALK",
+                                  [(0, 0), (100, 100), (0, 100), (100, 0)])])
+
+
 def test_load_save_roundtrip(tmp_path):
     path = tmp_path / "zones.json"
     original = ZoneManager("CAM", [Zone("SW", "CAM", "SIDEWALK", POLYGON)])

@@ -76,7 +76,7 @@ Dataset pipeline cần cover:
 - bbox touches ROI only nhưng bottom-center vẫn ngoài polygon;
 - tracker ID switch (không được tạo alert trùng);
 
-Occlusion, low light, rain và crowded scene là điều kiện khó cần có cả positive và negative; không tự động coi chúng là negative. Case gần biên gán nhãn theo bottom-center (trên biên tính inside), stationary/dwell và precedence `IGNORE > ALLOWED > SIDEWALK / MONITORED`.
+Occlusion, low light, rain và crowded scene là điều kiện khó cần có cả positive và negative; không tự động coi chúng là negative. Case gần biên gán nhãn theo bottom-center (trên biên tính inside), số frame liên tiếp và precedence `IGNORE > ALLOWED > SIDEWALK / MONITORED`.
 
 ---
 
@@ -93,7 +93,7 @@ Ví dụ:
       "event_id": "GT_001",
       "object_class": "motorcycle",
       "start_time_sec": 32.5,
-      "stationary_since_sec": 32.5,
+      "min_inside_frames": 30,
       "violation_time_sec": 62.5,
       "end_time_sec": 84.0,
       "zone_id": "SW01",
@@ -104,7 +104,10 @@ Ví dụ:
 }
 ```
 
-Timestamp là giây từ đầu video: `start_time_sec` là thời điểm vào vùng, `stationary_since_sec` là bắt đầu đứng yên, `violation_time_sec` là lúc đủ dwell theo config annotation. Ví dụ dùng dwell 30 giây, không phải threshold nghiệm thu. GT ID độc lập với tracker ID; dùng bbox/keyframes hoặc track hint để phân biệt nhiều phương tiện cùng zone.
+Timestamp là giây từ đầu video: `start_time_sec` là thời điểm vào vùng và
+`violation_time_sec` là frame đạt ngưỡng theo config annotation. Ví dụ dùng 30
+frame, không phải threshold nghiệm thu. GT ID độc lập với tracker ID; dùng
+bbox/keyframes hoặc track hint để phân biệt nhiều phương tiện cùng zone.
 
 Nếu có thể, lưu thêm:
 
@@ -166,7 +169,7 @@ Nếu có nhiều camera:
 Một ground-truth event cần xác định:
 
 1. thời điểm object đi vào monitored zone;
-2. thời điểm object bắt đầu stationary;
+2. frame object bắt đầu chuỗi quan sát liên tiếp trong ROI;
 3. thời điểm đủ điều kiện violation theo annotation policy;
 4. thời điểm object rời zone;
 5. class;

@@ -33,7 +33,7 @@ footer { display: none !important; }
 
 EVENT_COLUMNS = [
     "Thời điểm", "Phương tiện", "Track ID", "Khu vực", "Loại vùng",
-    "Thời gian dừng (giây)", "Độ tin cậy", "Trạng thái", "Event ID",
+    "Số frame trong ROI", "Độ tin cậy", "Trạng thái", "Event ID",
 ]
 
 
@@ -205,7 +205,7 @@ def events_to_dataframe(events):
             "Track ID": event["track_id"],
             "Khu vực": event["zone_id"],
             "Loại vùng": event["zone_type"],
-            "Thời gian dừng (giây)": round(float(event["dwell_time_sec"]), 2),
+            "Số frame trong ROI": int(event["inside_frame_count"]),
             "Độ tin cậy": round(float(event["confidence"]), 3),
             "Trạng thái": event["status"],
             "Event ID": event["event_id"],
@@ -227,15 +227,15 @@ def build_charts(events):
     figure.add_trace(go.Bar(x=vehicle_counts.index, y=vehicle_counts.values,
                             marker_color="#2563eb", name="Sự kiện"), row=1, col=1)
     figure.add_trace(go.Scatter(
-        x=frame["violation_at"], y=frame["dwell_time_sec"], mode="markers+lines",
+        x=frame["violation_at"], y=frame["inside_frame_count"], mode="markers+lines",
         text=[f"{row.object_class} | Track {row.track_id}" for row in frame.itertuples()],
-        hovertemplate="%{text}<br>Giây: %{x:.2f}<br>Dwell: %{y:.2f}<extra></extra>",
+        hovertemplate="%{text}<br>Giây: %{x:.2f}<br>Inside frames: %{y}<extra></extra>",
         marker=dict(size=10, color="#dc2626"), name="Thời điểm",
     ), row=1, col=2)
     figure.update_xaxes(title_text="Phương tiện", row=1, col=1)
     figure.update_yaxes(title_text="Số sự kiện", row=1, col=1)
     figure.update_xaxes(title_text="Thời gian video (giây)", row=1, col=2)
-    figure.update_yaxes(title_text="Dwell (giây)", row=1, col=2)
+    figure.update_yaxes(title_text="Số frame liên tiếp trong ROI", row=1, col=2)
     figure.update_layout(height=460, showlegend=False,
                          margin=dict(l=35, r=25, t=55, b=35))
     return figure
@@ -248,7 +248,7 @@ def build_summary(result: VideoRunResult, roi_source):
         f"| Sự kiện được chấp nhận | **{result.accepted}** |",
         f"| Candidate vi phạm | {result.candidates} |",
         f"| Trùng lặp bị chặn | {result.suppressed} |",
-        f"| Track đứng yên | {result.stationary_tracks} |",
+        f"| Track đạt ngưỡng frame | {result.qualified_tracks} |",
         f"| Track duy nhất | {result.unique_tracks} |",
         f"| Khung hình đã xử lý | {result.processed_frames} |",
         f"| Tốc độ xử lý | {result.processing_fps:.2f} FPS |",
@@ -281,7 +281,7 @@ def _ensure_browser_video(source_path):
         return source, "Không chuyển được H.264; Gradio sẽ thử xử lý video gốc."
 
 
-def run_detection(video_path, points, zone_type, confidence, nms, dwell_time,
+def run_detection(video_path, points, zone_type, confidence, nms, min_inside_frames,
                   roi_status, progress=gr.Progress()):
     if not video_path:
         raise gr.Error("Hãy tải video trước.")
@@ -297,7 +297,7 @@ def run_detection(video_path, points, zone_type, confidence, nms, dwell_time,
     config["camera"]["camera_id"] = "WEB_DEMO"
     config["detector"]["confidence_threshold"] = float(confidence)
     config["detector"]["nms_threshold"] = float(nms)
-    config["violation"]["min_dwell_time_sec"] = float(dwell_time)
+    config["violation"]["min_inside_frames"] = int(min_inside_frames)
     run_id = uuid4().hex
     run_directory = WEB_OUTPUT_ROOT / run_id
     output_path = run_directory / f"annotated_{Path(video_path).stem}.mp4"
@@ -361,9 +361,10 @@ def build_app():
                 nms = gr.Slider(0.1, 0.9,
                                 value=detector_defaults.get("nms_threshold", 0.45), step=0.05,
                                 label="Ngưỡng IoU/NMS")
-                dwell = gr.Slider(1, 120,
-                                  value=violation_defaults.get("min_dwell_time_sec", 30), step=1,
-                                  label="Thời gian đứng yên tối thiểu (giây)")
+                inside_frames = gr.Slider(
+                    1, 900, value=violation_defaults.get("min_inside_frames", 30), step=1,
+                    label="Số frame liên tiếp tối thiểu trong ROI",
+                )
                 zone_type = gr.Dropdown(["SIDEWALK", "MONITORED"], value="SIDEWALK",
                                         label="Loại khu vực")
 
@@ -430,7 +431,7 @@ def build_app():
         )
         run_button.click(
             run_detection,
-            [video_input, points_state, zone_type, confidence, nms, dwell, roi_status],
+            [video_input, points_state, zone_type, confidence, nms, inside_frames, roi_status],
             [video_output, table_output, chart_output, summary_output, gallery_output],
             concurrency_limit=1,
         )

@@ -18,7 +18,8 @@ class EventRepository:
                     zone_id TEXT NOT NULL, zone_type TEXT NOT NULL, track_id INTEGER NOT NULL,
                     object_class TEXT NOT NULL, entered_at REAL NOT NULL,
                     stationary_since REAL NOT NULL, violation_at REAL NOT NULL, left_at REAL,
-                    dwell_time_sec REAL NOT NULL, confidence REAL NOT NULL,
+                    dwell_time_sec REAL NOT NULL, inside_frame_count INTEGER NOT NULL DEFAULT 0,
+                    confidence REAL NOT NULL,
                     snapshot_path TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('OPEN','CLOSED')),
                     config_version TEXT NOT NULL, model_version TEXT NOT NULL
                 )""")
@@ -26,6 +27,11 @@ class EventRepository:
                     "CREATE INDEX IF NOT EXISTS idx_events_run_time "
                     "ON events(run_id, violation_at)"
                 )
+                columns = {row[1] for row in self.connection.execute("PRAGMA table_info(events)")}
+                if "inside_frame_count" not in columns:
+                    self.connection.execute(
+                        "ALTER TABLE events ADD COLUMN inside_frame_count INTEGER NOT NULL DEFAULT 0"
+                    )
         except Exception:
             self.connection.close()
             raise

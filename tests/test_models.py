@@ -29,7 +29,8 @@ def test_event_canonical_schema():
         event_id="EV1", run_id="RUN1", video_id="VIDEO1", camera_id="CAM_001",
         zone_id="SW01", zone_type="SIDEWALK", track_id=7, object_class="car",
         entered_at=1.0, stationary_since=2.0, violation_at=32.0, left_at=None,
-        dwell_time_sec=30.0, confidence=0.9, snapshot_path="data/events/EV1.jpg",
+        dwell_time_sec=30.0, inside_frame_count=30, confidence=0.9,
+        snapshot_path="data/events/EV1.jpg",
         status="OPEN", config_version="v1", model_version="baseline",
     )
     assert event.event_type == "SUSPECTED_AREA_OCCUPATION"
@@ -37,6 +38,7 @@ def test_event_canonical_schema():
     assert set(asdict(event)) == {
         "event_id", "event_type", "run_id", "video_id", "camera_id", "zone_id",
         "zone_type", "track_id", "object_class", "entered_at", "stationary_since",
-        "violation_at", "left_at", "dwell_time_sec", "confidence", "snapshot_path",
+        "violation_at", "left_at", "dwell_time_sec", "inside_frame_count",
+        "confidence", "snapshot_path",
         "status", "config_version", "model_version",
     }

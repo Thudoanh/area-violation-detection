@@ -9,6 +9,8 @@ def test_default_config():
     assert config["detector"]["confidence_threshold"] == 0.4
     assert "person" in config["detector"]["detection_classes"]
     assert "person" not in config["violation"]["target_classes"]
+    assert config["violation"]["min_inside_frames"] == 30
+    assert "stationary" not in config
 
 
 def test_custom_config(tmp_path):

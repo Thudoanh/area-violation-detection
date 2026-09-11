@@ -10,8 +10,7 @@ from src.violation.settings import number
 class State(str, Enum):
     OUTSIDE = "OUTSIDE"
     ENTERING = "ENTERING"
-    INSIDE_MOVING = "INSIDE_MOVING"
-    STATIONARY = "STATIONARY"
+    INSIDE_PENDING = "INSIDE_PENDING"
     SUSPECTED_VIOLATION = "SUSPECTED_VIOLATION"
     ALERTED = "ALERTED"
     CLOSED = "CLOSED"
@@ -30,8 +29,11 @@ class Episode:
 
 
 class StateMachine:
-    def __init__(self, min_dwell_time_sec, exit_grace_sec):
-        self.threshold = number(min_dwell_time_sec, "violation.min_dwell_time_sec", positive=True)
+    def __init__(self, min_inside_frames, exit_grace_sec):
+        if (isinstance(min_inside_frames, bool) or not isinstance(min_inside_frames, int)
+                or min_inside_frames < 1):
+            raise ValueError("violation.min_inside_frames must be a positive integer")
+        self.threshold = min_inside_frames
         self.grace = number(exit_grace_sec, "violation.exit_grace_sec")
         self.episodes = {}
         self.closed = []
@@ -43,7 +45,7 @@ class StateMachine:
         episode.left_at = left_at
         self.closed.append(episode)
 
-    def update(self, track_id, zone_id, timestamp, stationary=False, dwell=0.0,
+    def update(self, track_id, zone_id, timestamp, inside_frames=0,
                observed=True) -> State:
         number(timestamp, "timestamp")
         episode = self.episodes.get(track_id)
@@ -72,17 +74,18 @@ class StateMachine:
                 return episode.state
             return State.OUTSIDE
         if episode is None:
-            self.episodes[track_id] = Episode(track_id, zone_id, timestamp)
-            return State.ENTERING
+            episode = Episode(track_id, zone_id, timestamp)
+            self.episodes[track_id] = episode
+            if inside_frames >= self.threshold:
+                episode.state = State.SUSPECTED_VIOLATION
+            return episode.state
         episode.absent_since = episode.left_at = None
         if episode.event_id is not None:
             episode.state = State.ALERTED
-        elif stationary and dwell >= self.threshold:
+        elif inside_frames >= self.threshold:
             episode.state = State.SUSPECTED_VIOLATION
-        elif stationary:
-            episode.state = State.STATIONARY
         else:
-            episode.state = State.INSIDE_MOVING
+            episode.state = State.INSIDE_PENDING
         return episode.state
 
     def mark_alerted(self, track_id, event_id):

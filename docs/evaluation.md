@@ -174,8 +174,7 @@ Baseline run phải freeze:
 model
 tracker config
 zone
-stationary threshold
-dwell time
+minimum consecutive inside frames
 dedup threshold
 dataset version
 code commit
@@ -203,9 +202,7 @@ Các tham số cần tune:
 
 ```text
 detector confidence
-stationary window
-stationary displacement
-min dwell time
+minimum consecutive inside frames
 exit grace
 dedup cooldown
 spatial dedup distance
@@ -265,14 +262,10 @@ Mỗi FP/FN nên gán một cause:
 - wrong ROI;
 - boundary issue.
 
-### Motion error
+### Consecutive-frame error
 
-- moving classified as stationary;
-- stationary classified as moving.
-
-### Temporal error
-
-- dwell threshold too short/long.
+- inside sequence reset by missed detection or track-ID change;
+- frame threshold too short/long for the source FPS.
 
 ### Dedup error
 

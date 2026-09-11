@@ -4,7 +4,22 @@ import cv2
 import numpy as np
 
 from src.core.models import Detection, TrackedObject
-from src.zones.geometry import get_bottom_center
+
+
+def _draw_label(image, text, x, y, color):
+    """Draw one readable label, replacing any previous label at this position."""
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.55
+    thickness = 2
+    (width, height), baseline = cv2.getTextSize(text, font, scale, thickness)
+    text_y = max(height + 4, y)
+    cv2.rectangle(
+        image, (x, text_y - height - 4),
+        (min(image.shape[1] - 1, x + width + 6), text_y + baseline + 2),
+        (20, 20, 20), -1,
+    )
+    cv2.putText(image, text, (x + 3, text_y), font, scale, color,
+                thickness, cv2.LINE_AA)
 
 
 def draw_detections(frame, detections: list[Detection]):
@@ -21,23 +36,13 @@ def draw_detections(frame, detections: list[Detection]):
 
 
 def draw_tracks(frame, tracks: list[TrackedObject], memberships=None):
-    """Return bbox + class + track ID + confidence on a copy of the frame."""
+    """Return bounding boxes labelled only with persistent track IDs."""
     annotated = frame.copy()
     for track in tracks:
         x1, y1, x2, y2 = (int(value) for value in track.bbox)
         color = (0, 200, 0)
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-        label = f"{track.class_name} ID:{track.track_id} {track.confidence:.2f}"
-        if memberships is not None:
-            membership = memberships[track.track_id]
-            names = list(dict.fromkeys(z.zone_type for z in membership.matched_zones))
-            label += " | " + ("+".join(names) if names else "OUTSIDE")
-            if membership.effective_zone:
-                label += f" -> {membership.effective_zone.zone_id}"
-            anchor = tuple(int(v) for v in get_bottom_center(track.bbox))
-            cv2.circle(annotated, anchor, 3, color, -1)
-        cv2.putText(annotated, label, (x1, max(15, y1 - 5)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+        _draw_label(annotated, f"ID:{track.track_id}", x1, y1 - 5, color)
     return annotated
 
 
@@ -56,16 +61,14 @@ def draw_zones(frame, zones):
 
 
 def draw_temporal(frame, tracks, statuses):
-    """Add motion, stationary dwell and lifecycle, without changing source pixels."""
+    """Replace the ID label with a violation label after N-frame confirmation."""
     annotated = frame.copy()
     for track in tracks:
-        motion, dwell, state = statuses[track.track_id]
-        label = f"{'STATIONARY' if motion.stationary else 'MOVING'} | dwell={dwell.dwell_time_sec:.1f}s | {state.value}"
-        if state.value in ("SUSPECTED_VIOLATION", "ALERTED"):
-            label += " | SUSPECTED_AREA_OCCUPATION"
-        if track.class_name == "person":
-            label = "CONTEXT ONLY"
-        x, y = int(track.bbox[0]), int(track.bbox[1])
-        cv2.putText(annotated, label, (x, min(annotated.shape[0] - 5, max(30, y + 15))),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 180, 255), 1, cv2.LINE_AA)
+        _, state = statuses[track.track_id]
+        if state.value not in ("SUSPECTED_VIOLATION", "ALERTED"):
+            continue
+        x1, y1, x2, y2 = (int(value) for value in track.bbox)
+        color = (0, 0, 255)
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3)
+        _draw_label(annotated, f"VIOLATION ID:{track.track_id}", x1, y1 - 5, color)
     return annotated

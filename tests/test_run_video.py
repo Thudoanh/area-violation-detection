@@ -6,7 +6,10 @@ import pytest
 from scripts import run_video
 from src.core.config import load_config
 from src.core.models import Detection, TrackedObject
-from src.core.visualization import draw_detections, draw_tracks
+from src.core.visualization import draw_detections, draw_temporal, draw_tracks
+from src.violation.inside_frame_counter import InsideFrameStatus
+from src.violation.state_machine import State
+from src.zones.zone_manager import ZoneManager
 
 
 @pytest.fixture(autouse=True)
@@ -132,7 +135,29 @@ def test_tracking_visualization_draws_id_and_preserves_input(monkeypatch):
     annotated = draw_tracks(frame, [track])
     assert not frame.any()
     assert annotated.any()
-    assert put_text.call_args.args[1] == "motorcycle ID:12 0.87"
+    assert put_text.call_args.args[1] == "ID:12"
+
+
+def test_temporal_overlay_shows_violation_only_after_confirmation(monkeypatch):
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    track = TrackedObject(12, (10, 30, 60, 80), 0.87, "motorcycle", 4.0)
+    put_text = Mock(wraps=run_video.cv2.putText)
+    monkeypatch.setattr(run_video.cv2, "putText", put_text)
+
+    pending = draw_temporal(
+        frame, [track], {12: (InsideFrameStatus("SW", 1.0, 29), State.INSIDE_PENDING)},
+    )
+    assert not pending.any()
+    put_text.assert_not_called()
+
+    annotated = draw_temporal(
+        frame, [track],
+        {12: (InsideFrameStatus("SW", 1.0, 30), State.SUSPECTED_VIOLATION)},
+    )
+
+    assert not frame.any()
+    assert annotated.any()
+    assert put_text.call_args.args[1] == "VIOLATION ID:12"
 
 
 def test_tracking_error_releases_video_resources(tmp_path, monkeypatch):
@@ -185,7 +210,8 @@ def test_zone_pipeline_overlaps_and_unique_summary(tmp_path, monkeypatch, capsys
     assert "Tracks entering IGNORE: 0" in summary
     labels = [call.args[1] for call in put_text.call_args_list]
     assert "SW SIDEWALK" in labels
-    assert any("SIDEWALK+ALLOWED -> AL" in label for label in labels)
+    assert "ID:12" in labels
+    assert not any("SIDEWALK+ALLOWED" in label for label in labels)
     assert writer.write.call_count == 2
 
 

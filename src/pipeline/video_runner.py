@@ -34,7 +34,7 @@ class VideoRunResult:
     detections: int = 0
     unique_tracks: int = 0
     average_active_tracks: float = 0.0
-    stationary_tracks: int = 0
+    qualified_tracks: int = 0
     candidates: int = 0
     accepted: int = 0
     suppressed: int = 0
@@ -177,7 +177,7 @@ def process_video(
             duration_sec=count / provider.fps, processing_fps=processing_fps,
             detections=sum(counts.values()), unique_tracks=len(track_classes),
             average_active_tracks=active_track_count / count,
-            stationary_tracks=len(event_pipeline.stationary_ids),
+            qualified_tracks=len(event_pipeline.qualified_track_ids),
             candidates=event_pipeline.stats["candidates"],
             accepted=event_pipeline.stats["accepted"],
             suppressed=event_pipeline.stats["suppressed"],
@@ -202,7 +202,7 @@ def process_video(
             print(f"Tracks entering {kind}: {result.zone_tracks[kind]}")
         print(f"Average processing FPS (excluding model load): {processing_fps:.2f}")
         print(f"Output video: {output_path}")
-        print(f"Stationary tracks: {result.stationary_tracks}")
+        print(f"Tracks reaching inside-frame threshold: {result.qualified_tracks}")
         print(f"Violation candidates: {result.candidates}")
         print(f"Accepted events: {result.accepted}")
         print(f"Duplicates suppressed: {result.suppressed}")

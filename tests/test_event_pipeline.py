@@ -27,8 +27,9 @@ def test_one_event_extended_stop_close_and_evidence(tmp_path):
         assert pipeline.stats["accepted"] == pipeline.stats["snapshots"] == 1
         assert pipeline.stats["candidates"] == 1
         saved, = rows(pipeline)
-        assert saved["violation_at"] == 30
-        assert saved["dwell_time_sec"] == 30
+        assert saved["violation_at"] == 29
+        assert saved["inside_frame_count"] == 30
+        assert saved["dwell_time_sec"] == 29
         assert saved["stationary_since"] == saved["entered_at"] == 0
         assert saved["status"] == "OPEN"
         assert Path(saved["snapshot_path"]).is_file()
@@ -57,21 +58,22 @@ def test_no_event_for_context_or_excluded_zone(tmp_path, name, types):
         pipeline.finish()
 
 
-def test_missing_track_resets_dwell_even_inside_grace(tmp_path):
+def test_missing_track_resets_inside_frame_count_even_inside_grace(tmp_path):
     zones = manager()
     pipeline = AreaMonitoringPipeline(config(tmp_path), "input.mp4", zones)
     try:
-        for timestamp in range(30):
+        for timestamp in range(29):
             step(pipeline, zones, timestamp, [track(timestamp)])
-        step(pipeline, zones, 30, [])
-        step(pipeline, zones, 31, [track(31)])
-        assert pipeline.dwell.tracks[1].stationary_since is None
-        for timestamp in range(32, 61):
+        step(pipeline, zones, 29, [])
+        step(pipeline, zones, 30, [track(30)])
+        assert pipeline.inside_frames.tracks[1].consecutive_frames == 1
+        for timestamp in range(31, 59):
             step(pipeline, zones, timestamp, [track(timestamp)])
         assert not rows(pipeline)
-        step(pipeline, zones, 61, [track(61)])
+        step(pipeline, zones, 59, [track(59)])
         saved, = rows(pipeline)
-        assert saved["stationary_since"] == 31
+        assert saved["inside_frame_count"] == 30
+        assert saved["entered_at"] == 30
     finally:
         pipeline.finish()
 
@@ -109,7 +111,7 @@ def test_failed_storage_does_not_lock_and_can_retry(tmp_path, monkeypatch, caplo
     zones = manager()
     pipeline = AreaMonitoringPipeline(config(tmp_path), "input.mp4", zones)
     try:
-        for timestamp in range(30):
+        for timestamp in range(29):
             step(pipeline, zones, timestamp, [track(timestamp)])
         target, method = ((pipeline.evidence, "save") if failing_stage == "snapshot"
                           else (pipeline.repository, "create"))
@@ -120,7 +122,7 @@ def test_failed_storage_does_not_lock_and_can_retry(tmp_path, monkeypatch, caplo
 
         monkeypatch.setattr(target, method, fail)
         with pytest.raises(OSError, match="storage failed"):
-            step(pipeline, zones, 30, [track(30)])
+            step(pipeline, zones, 29, [track(29)])
         assert pipeline.states.episodes[1].state == State.SUSPECTED_VIOLATION
         assert not pipeline.dedup.records
         assert not rows(pipeline)
@@ -146,13 +148,13 @@ def test_eof_closes_only_this_run_with_unknown_left_at(tmp_path):
         assert connection.execute("SELECT status,left_at FROM events").fetchone() == ("CLOSED", None)
 
 
-def test_moving_pass_through_does_not_accumulate_stationary_dwell(tmp_path):
+def test_motion_does_not_block_n_frame_validation(tmp_path):
     zones = manager()
     pipeline = AreaMonitoringPipeline(config(tmp_path), "input.mp4", zones)
     try:
         for timestamp in range(40):
             step(pipeline, zones, timestamp, [track(timestamp, x=timestamp * 8)])
-        assert not rows(pipeline)
+        assert len(rows(pipeline)) == 1
     finally:
         pipeline.finish()
 

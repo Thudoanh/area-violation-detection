@@ -13,13 +13,13 @@ kiểm tra lại. Kết quả không phải kết luận vi phạm pháp luật.
 
 ```text
 Video → Nhận diện phương tiện → Theo dõi → Kiểm tra ROI
-      → Xác định dừng lâu → Tạo sự kiện → Video + SQLite + Snapshot
+      → Đếm frame liên tiếp trong ROI → Tạo sự kiện → Video + SQLite + Snapshot
 ```
 
 1. Nhận diện người và các phương tiện xuất hiện trong video.
 2. Theo dõi từng phương tiện bằng một ID trong suốt quá trình di chuyển.
 3. Kiểm tra phương tiện có nằm trong vùng giám sát hay không.
-4. Chỉ tạo sự kiện khi phương tiện đứng trong vùng đủ lâu.
+4. Chỉ tạo sự kiện khi phương tiện ở liên tiếp trong vùng đủ số frame cấu hình.
 5. Hạn chế cảnh báo trùng và lưu lại bằng chứng để hậu kiểm.
 
 Các phương tiện được xét gồm xe máy, xe đạp, ô tô, xe buýt và xe tải. Người chỉ
@@ -32,7 +32,7 @@ Web demo sử dụng giao diện tiếng Việt và hỗ trợ:
 - tải video qua file picker và tự chuyển sang H.264 để xem trước trên trình duyệt;
 - vẽ ROI trực tiếp bằng cách click lên khung hình;
 - tự động đề xuất ROI cho vùng kẻ/sơn có độ tương phản rõ;
-- điều chỉnh ngưỡng nhận diện và thời gian dừng;
+- điều chỉnh ngưỡng nhận diện và số frame liên tiếp tối thiểu trong ROI;
 - xem video đã chạy detection ngay trên trình duyệt;
 - xem bảng sự kiện, biểu đồ tổng quan và ảnh bằng chứng.
 
@@ -112,6 +112,7 @@ hiện tại, trong khi SQLite vẫn giữ lịch sử của các lần chạy t
 |---|---|
 | Nhận diện | YOLO11n pretrained COCO |
 | Theo dõi | ByteTrack |
+| Kiểm tra polygon | Shapely |
 | Xử lý video | OpenCV |
 | Web demo | Gradio + Plotly |
 | Lưu sự kiện | SQLite + ảnh JPEG |
@@ -135,7 +136,7 @@ weights/             Model weights cục bộ
 |---|---|
 | Pipeline detection → event | Đã triển khai |
 | Web demo | Đã triển khai |
-| Automated tests | 201 passed, 1 conditional test skipped |
+| Automated tests | 200 passed, 1 conditional test skipped |
 | Video CCTV thực tế | Chưa có trong repository |
 | Event Precision / Recall / F1 | Chưa có baseline |
 | Acceptance thresholds | Chốt sau Baseline Run 0 |
@@ -146,8 +147,8 @@ ground truth và Baseline Run 0.
 
 ## Phạm vi hiện tại
 
-Dự án tập trung vào video file từ camera cố định và sự kiện phương tiện đứng lâu
-trong vùng giám sát. Phiên bản hiện tại chưa hỗ trợ RTSP, nhận diện biển số, nhận
+Dự án tập trung vào video file từ camera cố định và sự kiện phương tiện hiện diện
+liên tiếp đủ số frame trong vùng giám sát. Phiên bản hiện tại chưa hỗ trợ RTSP, nhận diện biển số, nhận
 diện khuôn mặt, nhiều camera đồng thời hoặc semantic segmentation vỉa hè.
 
 Auto ROI hiện phù hợp nhất với vùng kẻ/sơn hoặc vùng có đường biên tương phản rõ.

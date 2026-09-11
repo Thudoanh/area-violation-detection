@@ -1,7 +1,6 @@
-"""Pixel geometry for manual ROI; boundary points count as inside."""
+"""Shapely pixel geometry for manual ROI; boundary points count as inside."""
 
-import cv2
-import numpy as np
+from shapely.geometry import Point, Polygon
 
 
 def get_bottom_center(bbox):
@@ -10,7 +9,10 @@ def get_bottom_center(bbox):
 
 
 def point_in_polygon(point, polygon) -> bool:
-    contour = np.asarray(polygon, dtype=np.float32)
-    if contour.ndim != 2 or contour.shape[1] != 2 or len(contour) < 3:
+    if not isinstance(polygon, (list, tuple)) or len(polygon) < 3:
         raise ValueError("Polygon must contain at least 3 xy points")
-    return cv2.pointPolygonTest(contour, (float(point[0]), float(point[1])), False) >= 0
+    shape = Polygon(polygon)
+    if shape.is_empty or not shape.is_valid or shape.area == 0:
+        raise ValueError("Polygon must be a valid nonzero-area shape")
+    # covers(), unlike contains(), includes points on the polygon boundary.
+    return shape.covers(Point(float(point[0]), float(point[1])))

@@ -20,7 +20,8 @@ def event(event_id="e1", track_id=1, timestamp=30.0):
     return ViolationEvent(event_id=event_id, run_id="r1", video_id="v1", camera_id="CAM_001",
         zone_id="0", zone_type="SIDEWALK", track_id=track_id, object_class="car",
         entered_at=0.0, stationary_since=0.0, violation_at=timestamp, left_at=None,
-        dwell_time_sec=timestamp, confidence=0.9, snapshot_path="", status="OPEN",
+        dwell_time_sec=timestamp, inside_frame_count=30, confidence=0.9,
+        snapshot_path="", status="OPEN",
         config_version="c1", model_version="m1")
 
 

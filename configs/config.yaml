@@ -39,10 +39,6 @@ zones:
     min_area_ratio: 0.005
     simplify_epsilon_ratio: 0.015
 
-stationary:
-  window_sec: 3
-  max_displacement_px: 15
-
 violation:
   event_type: SUSPECTED_AREA_OCCUPATION
   target_classes:
@@ -51,7 +47,8 @@ violation:
     - bicycle
     - bus
     - truck
-  min_dwell_time_sec: 30
+  # Consecutive tracked frames whose bottom-center is inside the target ROI.
+  min_inside_frames: 30
   exit_grace_sec: 3
 
 dedup:

@@ -4,11 +4,10 @@ import json
 from pathlib import Path
 import tempfile
 
-import cv2
-import numpy as np
+from shapely.geometry import Point, Polygon
 
 from src.core.models import TrackedObject, Zone
-from src.zones.geometry import get_bottom_center, point_in_polygon
+from src.zones.geometry import get_bottom_center
 from src.zones.models import ZONE_TYPES, ZoneMembership
 
 
@@ -28,8 +27,9 @@ def validate_zone(zone: Zone) -> None:
             raise ValueError("Polygon coordinates must be nonnegative pixel integers below 2**24")
     if len(set(tuple(p) for p in points)) < 3:
         raise ValueError("Polygon requires at least 3 distinct points")
-    if cv2.contourArea(np.asarray(points, dtype=np.float32)) == 0:
-        raise ValueError("Polygon must have nonzero area")
+    shape = Polygon(points)
+    if shape.is_empty or not shape.is_valid or shape.area == 0:
+        raise ValueError("Polygon must be a valid nonzero-area shape")
 
 
 class ZoneManager:
@@ -46,6 +46,7 @@ class ZoneManager:
             seen.add(zone.zone_id)
         self.camera_id = camera_id
         self.zones = list(zones)
+        self._polygons = {zone.zone_id: Polygon(zone.polygon) for zone in self.zones}
 
     @classmethod
     def load_from_json(cls, path):
@@ -100,7 +101,8 @@ class ZoneManager:
                 raise ValueError(f"Zone {zone.zone_id} lies outside video resolution {width}x{height}")
 
     def is_inside_zone(self, track: TrackedObject, zone: Zone) -> bool:
-        return point_in_polygon(get_bottom_center(track.bbox), zone.polygon)
+        x, y = get_bottom_center(track.bbox)
+        return self._polygons[zone.zone_id].covers(Point(float(x), float(y)))
 
     def get_membership(self, track: TrackedObject, camera_id: str) -> ZoneMembership:
         matched = [z for z in self.get_zones(camera_id) if self.is_inside_zone(track, z)]

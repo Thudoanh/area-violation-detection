@@ -50,6 +50,7 @@ class ViolationEvent:
     violation_at: float
     left_at: Optional[float]
     dwell_time_sec: float
+    inside_frame_count: int
     confidence: float
     snapshot_path: str
     status: Literal["OPEN", "CLOSED"]

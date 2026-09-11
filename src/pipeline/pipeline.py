@@ -10,8 +10,7 @@ from uuid import uuid4
 from src.core.visualization import draw_temporal
 from src.storage.event_repository import EventRepository
 from src.storage.evidence_writer import EvidenceWriter
-from src.violation.stationary import StationaryDetector, Motion
-from src.violation.dwell_timer import DwellTimer, Dwell
+from src.violation.inside_frame_counter import InsideFrameCounter, InsideFrameStatus
 from src.violation.state_machine import StateMachine
 from src.violation.violation_engine import ViolationEngine
 from src.violation.deduplicator import Deduplicator
@@ -31,13 +30,12 @@ def project_path(value):
 
 class AreaMonitoringPipeline:
     def __init__(self, config, video_path, zone_manager, run_id=None):
-        for key in ("stationary", "violation", "dedup", "storage"):
+        for key in ("violation", "dedup", "storage"):
             if not isinstance(config.get(key), dict):
                 raise ValueError(f"Config must provide {key} mapping")
-        stationary, violation, dedup = (config[k] for k in ("stationary", "violation", "dedup"))
-        self.stationary = StationaryDetector(stationary.get("window_sec"), stationary.get("max_displacement_px"))
-        self.dwell = DwellTimer()
-        self.states = StateMachine(violation.get("min_dwell_time_sec"), violation.get("exit_grace_sec"))
+        violation, dedup = (config[k] for k in ("violation", "dedup"))
+        self.inside_frames = InsideFrameCounter()
+        self.states = StateMachine(violation.get("min_inside_frames"), violation.get("exit_grace_sec"))
         self.engine = ViolationEngine(violation)
         self.dedup = Deduplicator(dedup.get("cooldown_sec"), dedup.get("spatial_distance_px"))
         version = json.dumps({"config": config, "zones": [vars(z) for z in zone_manager.zones]}, sort_keys=True)
@@ -57,8 +55,7 @@ class AreaMonitoringPipeline:
         self.evidence = EvidenceWriter(project_path(config["storage"].get("snapshot_dir")))
         self.repository = EventRepository(project_path(config["storage"].get("sqlite_path")))
         self.stats = Counter()
-        self.stationary_ids = set()
-        self.previous_keys = {}
+        self.qualified_track_ids = set()
         self.last_timestamp = None
 
     def _flush_closed(self):
@@ -84,10 +81,8 @@ class AreaMonitoringPipeline:
         self.last_timestamp = timestamp
         visible = {t.track_id for t in tracks}
         self.dedup.observe(visible)
-        for missing in set(self.previous_keys) - visible:
-            self.stationary.reset(missing)
-            self.dwell.reset(missing)
-            del self.previous_keys[missing]
+        for missing in set(self.inside_frames.tracks) - visible:
+            self.inside_frames.reset(missing)
         for missing in set(self.states.episodes) - visible:
             self.states.update(missing, None, timestamp, observed=False)
         statuses = {}
@@ -95,23 +90,17 @@ class AreaMonitoringPipeline:
         for track in tracks:
             membership = memberships[track.track_id]
             zone = membership.target_zone if track.class_name in self.engine.targets else None
-            key = (zone.zone_id, track.class_name) if zone else None
-            if self.previous_keys.get(track.track_id) != key or key is None:
-                self.stationary.reset(track.track_id)
-                self.dwell.reset(track.track_id)
-            motion, dwell = Motion(), Dwell()
+            inside = InsideFrameStatus()
             if zone:
-                self.previous_keys[track.track_id] = key
-                motion = self.stationary.update(track)
-                dwell = self.dwell.update(track.track_id, membership, motion, timestamp)
-                if motion.stationary:
-                    self.stationary_ids.add(track.track_id)
+                inside = self.inside_frames.update(track.track_id, membership, timestamp)
+                if inside.consecutive_frames >= self.engine.threshold:
+                    self.qualified_track_ids.add(track.track_id)
             else:
-                self.previous_keys.pop(track.track_id, None)
+                self.inside_frames.reset(track.track_id)
             state = self.states.update(track.track_id, zone.zone_id if zone else None, timestamp,
-                                       motion.stationary, dwell.dwell_time_sec)
-            statuses[track.track_id] = (motion, dwell, state)
-            candidate = self.engine.evaluate(track, membership, motion, dwell, state, **self.context)
+                                       inside.consecutive_frames)
+            statuses[track.track_id] = (inside, state)
+            candidate = self.engine.evaluate(track, membership, inside, state, **self.context)
             if candidate:
                 candidates.append((candidate, get_bottom_center(track.bbox)))
         self._flush_closed()

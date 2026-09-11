@@ -48,7 +48,7 @@ Phương tiện thuộc nhóm cần giám sát
 
 Đây **không phải định nghĩa pháp lý cuối cùng**.
 
-Các ngưỡng thời gian, stationary threshold chỉ phục vụ nhận diện kỹ thuật và phải được hiệu chỉnh theo môi trường triển khai.
+Ngưỡng số frame liên tiếp chỉ phục vụ nhận diện kỹ thuật và phải được hiệu chỉnh theo FPS/môi trường triển khai.
 
 ---
 
@@ -173,7 +173,7 @@ Ví dụ:
   "zone_id": "SW_01",
   "track_id": 27,
   "object_class": "motorcycle",
-  "dwell_time_sec": 42.8,
+  "inside_frame_count": 30,
   "confidence": 0.91,
   "status": "OPEN"
 }
@@ -188,8 +188,8 @@ MVP được xem là thành công khi:
 - xử lý được video end-to-end;
 - theo dõi được object bằng persistent ID;
 - ROI hoạt động đúng;
-- phân biệt được moving và stationary ở mức chấp nhận được;
-- tạo event theo dwell time;
+- đếm đúng số frame liên tiếp mà track nằm trong ROI;
+- tạo event theo ngưỡng `min_inside_frames`;
 - không tạo duplicate alert liên tục;
 - có ground truth để tính event precision/recall/F1;
 - có log experiment để tune threshold.
