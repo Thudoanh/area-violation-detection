@@ -1,14 +1,22 @@
-"""Load/save camera polygons and evaluate bottom-center membership."""
+"""Load/save camera polygons and evaluate bounding-box overlap with zones."""
 
 import json
 from pathlib import Path
 import tempfile
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Polygon, box
 
 from src.core.models import TrackedObject, Zone
-from src.zones.geometry import get_bottom_center
 from src.zones.models import ZONE_TYPES, ZoneMembership
+
+
+DEFAULT_BBOX_OVERLAP_THRESHOLD = 0.2
+
+
+def validate_bbox_overlap_threshold(value) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value <= 1:
+        raise ValueError("zones.bbox_overlap_threshold must be a number in (0, 1]")
+    return float(value)
 
 
 def validate_zone(zone: Zone) -> None:
@@ -33,7 +41,8 @@ def validate_zone(zone: Zone) -> None:
 
 
 class ZoneManager:
-    def __init__(self, camera_id: str, zones: list[Zone]):
+    def __init__(self, camera_id: str, zones: list[Zone],
+                 bbox_overlap_threshold: float = DEFAULT_BBOX_OVERLAP_THRESHOLD):
         if not isinstance(camera_id, str) or not camera_id.strip():
             raise ValueError("camera_id must be a nonempty string")
         seen = set()
@@ -47,6 +56,11 @@ class ZoneManager:
         self.camera_id = camera_id
         self.zones = list(zones)
         self._polygons = {zone.zone_id: Polygon(zone.polygon) for zone in self.zones}
+        self.set_bbox_overlap_threshold(bbox_overlap_threshold)
+
+    def set_bbox_overlap_threshold(self, value) -> None:
+        """Set the minimum fraction of an object's bbox that must overlap a zone."""
+        self.bbox_overlap_threshold = validate_bbox_overlap_threshold(value)
 
     @classmethod
     def load_from_json(cls, path):
@@ -101,8 +115,12 @@ class ZoneManager:
                 raise ValueError(f"Zone {zone.zone_id} lies outside video resolution {width}x{height}")
 
     def is_inside_zone(self, track: TrackedObject, zone: Zone) -> bool:
-        x, y = get_bottom_center(track.bbox)
-        return self._polygons[zone.zone_id].covers(Point(float(x), float(y)))
+        x1, y1, x2, y2 = (float(value) for value in track.bbox)
+        if x2 <= x1 or y2 <= y1:
+            return False
+        bbox = box(x1, y1, x2, y2)
+        overlap_ratio = bbox.intersection(self._polygons[zone.zone_id]).area / bbox.area
+        return overlap_ratio >= self.bbox_overlap_threshold
 
     def get_membership(self, track: TrackedObject, camera_id: str) -> ZoneMembership:
         matched = [z for z in self.get_zones(camera_id) if self.is_inside_zone(track, z)]

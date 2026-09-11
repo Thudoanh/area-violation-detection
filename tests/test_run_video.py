@@ -135,7 +135,7 @@ def test_tracking_visualization_draws_id_and_preserves_input(monkeypatch):
     annotated = draw_tracks(frame, [track])
     assert not frame.any()
     assert annotated.any()
-    assert put_text.call_args.args[1] == "ID:12"
+    assert put_text.call_args.args[1] == "motorcycle ID:12"
 
 
 def test_temporal_overlay_shows_violation_only_after_confirmation(monkeypatch):
@@ -157,7 +157,7 @@ def test_temporal_overlay_shows_violation_only_after_confirmation(monkeypatch):
 
     assert not frame.any()
     assert annotated.any()
-    assert put_text.call_args.args[1] == "VIOLATION ID:12"
+    assert put_text.call_args.args[1] == "VIOLATION motorcycle ID:12"
 
 
 def test_tracking_error_releases_video_resources(tmp_path, monkeypatch):
@@ -210,7 +210,7 @@ def test_zone_pipeline_overlaps_and_unique_summary(tmp_path, monkeypatch, capsys
     assert "Tracks entering IGNORE: 0" in summary
     labels = [call.args[1] for call in put_text.call_args_list]
     assert "SW SIDEWALK" in labels
-    assert "ID:12" in labels
+    assert "person ID:12" in labels
     assert not any("SIDEWALK+ALLOWED" in label for label in labels)
     assert writer.write.call_count == 2
 

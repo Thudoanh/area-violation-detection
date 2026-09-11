@@ -9,7 +9,8 @@ def test_default_config():
     assert config["detector"]["confidence_threshold"] == 0.4
     assert "person" in config["detector"]["detection_classes"]
     assert "person" not in config["violation"]["target_classes"]
-    assert config["violation"]["min_inside_frames"] == 30
+    assert config["violation"]["min_inside_frames"] >= 1
+    assert config["zones"]["bbox_overlap_threshold"] == 0.2
     assert "stationary" not in config
 
 

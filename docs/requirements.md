@@ -48,13 +48,14 @@ Zone type:
 
 Hệ thống phải xác định object có nằm trong zone hay không.
 
-MVP dùng bottom-center point; điểm trên biên polygon tính là inside.
+MVP xét tỷ lệ diện tích giao giữa bounding box object và polygon ROI. Object ở
+trong ROI khi tỷ lệ này đạt `zones.bbox_overlap_threshold` (mặc định `0.2`).
 
-Precedence: `IGNORE > ALLOWED > SIDEWALK / MONITORED`. Object trong `SIDEWALK + ALLOWED` không sinh event. Bbox/mask overlap để giai đoạn sau.
+Precedence: `IGNORE > ALLOWED > SIDEWALK / MONITORED`. Object trong `SIDEWALK + ALLOWED` không sinh event.
 
 ### FR-06 — Consecutive Inside-Frame Validation
 
-Hệ thống phải đếm số frame quan sát liên tiếp mà bottom-center của cùng một track
+Hệ thống phải đếm số frame quan sát liên tiếp mà bounding box của cùng một track
 nằm trong target zone hiệu lực. Ra vùng, vào ALLOWED/IGNORE, đổi zone hoặc mất
 track phải reset bộ đếm.
 

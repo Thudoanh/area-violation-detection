@@ -73,10 +73,10 @@ Dataset pipeline cần cover:
 - vehicle outside polygon;
 - allowed-zone occupation;
 - ignore-zone occupation;
-- bbox touches ROI only nhưng bottom-center vẫn ngoài polygon;
+- bbox/ROI overlap nhỏ hơn ngưỡng 0.2;
 - tracker ID switch (không được tạo alert trùng);
 
-Occlusion, low light, rain và crowded scene là điều kiện khó cần có cả positive và negative; không tự động coi chúng là negative. Case gần biên gán nhãn theo bottom-center (trên biên tính inside), số frame liên tiếp và precedence `IGNORE > ALLOWED > SIDEWALK / MONITORED`.
+Occlusion, low light, rain và crowded scene là điều kiện khó cần có cả positive và negative; không tự động coi chúng là negative. Case gần biên gán nhãn theo tỷ lệ bbox/ROI giao nhau, số frame liên tiếp và precedence `IGNORE > ALLOWED > SIDEWALK / MONITORED`.
 
 ---
 

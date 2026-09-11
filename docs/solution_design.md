@@ -180,28 +180,26 @@ Zone manager chịu trách nhiệm:
 
 - load/save polygon;
 - đề xuất polygon vùng kẻ/sơn bằng temporal voting trên nhiều khung hình trong web demo;
-- point-in-polygon;
+- bbox/ROI overlap ratio;
 - xác định zone theo camera;
 - precedence bắt buộc: `IGNORE > ALLOWED > SIDEWALK / MONITORED`; `SIDEWALK + ALLOWED` trả NO VIOLATION. Membership trên biên được tính inside. Nếu nhiều target zone cùng chứa anchor, chọn zone đầu tiên theo thứ tự cấu hình để một track chỉ có một target zone hiệu lực; lưu thứ tự đó trong config version.
 
-Anchor MVP:
+Membership MVP:
 
 ```text
-bottom_center = ((x1+x2)/2, y2)
+bbox_overlap_ratio = area(bbox ∩ ROI) / area(bbox)
+inside = bbox_overlap_ratio >= zones.bbox_overlap_threshold  # default 0.2
 ```
 
-Future:
-
-- bbox overlap;
-- segmentation mask overlap.
+Future: segmentation mask overlap.
 
 ---
 
 ## 8. Shapely Zone Membership
 
 Mỗi polygon được tạo và kiểm tra tính hợp lệ bằng Shapely. Membership dùng
-`Polygon.covers(Point(bottom_center))`, vì vậy điểm nằm trên biên cũng được tính
-là inside. Polygon Shapely được cache theo zone, không dựng lại ở mỗi frame.
+diện tích giao giữa bbox và ROI chia cho diện tích bbox. Polygon Shapely được
+cache theo zone, không dựng lại ở mỗi frame.
 
 ---
 
@@ -454,7 +452,7 @@ Các phần viết mới:
 | person | Context only, detection/tracking, không violation evaluation |
 | Tracker | ByteTrack |
 | ROI | Manual polygon |
-| ROI membership | Bottom-center |
+| ROI membership | Bounding-box / ROI overlap ratio >= 0.2 |
 | Zones | SIDEWALK / MONITORED / ALLOWED / IGNORE |
 | Zone precedence | IGNORE > ALLOWED > SIDEWALK / MONITORED |
 | Zone geometry | Shapely `Polygon.covers(Point)` |

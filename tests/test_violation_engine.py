@@ -17,7 +17,9 @@ from tests.event_helpers import track, membership
     ("car", ("SIDEWALK",), 29, False),
 ])
 def test_rule(name, types, inside_frames, expected):
-    engine = ViolationEngine(load_config()["violation"])
+    config = load_config()["violation"]
+    config["min_inside_frames"] = 30
+    engine = ViolationEngine(config)
     result = engine.evaluate(track(30, name=name), membership(types),
         InsideFrameStatus("0", 0, inside_frames), State.SUSPECTED_VIOLATION,
         run_id="r", video_id="v",

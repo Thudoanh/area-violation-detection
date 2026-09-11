@@ -80,13 +80,32 @@ def test_missing_and_malformed_file(tmp_path):
         ZoneManager.load_from_json(path)
 
 
-def test_membership_bottom_center_not_bbox_overlap():
+def test_membership_uses_bbox_overlap_threshold():
     zone = Zone("SW", "CAM", "SIDEWALK", POLYGON)
     manager = ZoneManager("CAM", [zone])
     assert manager.is_inside_zone(track(), zone)
-    assert not manager.is_inside_zone(track((20, 80, 40, 120)), zone)
+    assert manager.is_inside_zone(track((20, 80, 40, 200)), zone) is False
     assert manager.get_membership(track(), "OTHER").matched_zones == []
     assert manager.get_zones("OTHER") == []
+
+
+@pytest.mark.parametrize("bbox,inside", [
+    ((0, 80, 100, 180), True),   # Exactly 20% of the bbox overlaps the ROI.
+    ((0, 81, 100, 181), False),  # 19% overlap.
+    ((0, 79, 100, 179), True),   # 21% overlap.
+    ((0, 101, 100, 201), False),
+    ((20, 20, 20, 40), False),
+])
+def test_bbox_overlap_boundary_and_invalid_bbox(bbox, inside):
+    zone = Zone("SW", "CAM", "SIDEWALK", POLYGON)
+    manager = ZoneManager("CAM", [zone])
+    assert manager.is_inside_zone(track(bbox), zone) is inside
+
+
+@pytest.mark.parametrize("threshold", [0, 1.1, True, "0.2"])
+def test_bbox_overlap_threshold_is_validated(threshold):
+    with pytest.raises(ValueError, match="bbox_overlap_threshold"):
+        ZoneManager("CAM", [], threshold)
 
 
 def test_all_types_precedence_and_config_order():

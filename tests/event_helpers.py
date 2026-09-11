@@ -27,6 +27,9 @@ def event(event_id="e1", track_id=1, timestamp=30.0):
 
 def config(tmp_path):
     result = load_config()
+    # Event-pipeline tests exercise the 30-frame rule independently of the
+    # user-configurable default in configs/config.yaml.
+    result["violation"]["min_inside_frames"] = 30
     result["storage"]["sqlite_path"] = str(tmp_path / "events.db")
     result["storage"]["snapshot_dir"] = str(tmp_path / "snapshots")
     result["detector"]["weights"] = str(tmp_path / "unused.onnx")

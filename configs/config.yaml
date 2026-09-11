@@ -31,6 +31,8 @@ tracking:
 
 zones:
   path: configs/zones/cam_001.json
+  # A track is inside a zone when this fraction of its bounding box overlaps it.
+  bbox_overlap_threshold: 0.2
   # Web demo automatic suggestion for stable painted/hatched regions.
   auto_detect:
     backend: classical
@@ -47,8 +49,8 @@ violation:
     - bicycle
     - bus
     - truck
-  # Consecutive tracked frames whose bottom-center is inside the target ROI.
-  min_inside_frames: 30
+  # Consecutive tracked frames whose bounding box sufficiently overlaps the target ROI.
+  min_inside_frames: 10
   exit_grace_sec: 3
 
 dedup:

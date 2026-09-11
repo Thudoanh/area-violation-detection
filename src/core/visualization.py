@@ -36,13 +36,13 @@ def draw_detections(frame, detections: list[Detection]):
 
 
 def draw_tracks(frame, tracks: list[TrackedObject], memberships=None):
-    """Return bounding boxes labelled only with persistent track IDs."""
+    """Return bounding boxes labelled with object type and persistent track ID."""
     annotated = frame.copy()
     for track in tracks:
         x1, y1, x2, y2 = (int(value) for value in track.bbox)
         color = (0, 200, 0)
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
-        _draw_label(annotated, f"ID:{track.track_id}", x1, y1 - 5, color)
+        _draw_label(annotated, f"{track.class_name} ID:{track.track_id}", x1, y1 - 5, color)
     return annotated
 
 
@@ -61,7 +61,7 @@ def draw_zones(frame, zones):
 
 
 def draw_temporal(frame, tracks, statuses):
-    """Replace the ID label with a violation label after N-frame confirmation."""
+    """Replace the track label with a typed violation label after confirmation."""
     annotated = frame.copy()
     for track in tracks:
         _, state = statuses[track.track_id]
@@ -70,5 +70,8 @@ def draw_temporal(frame, tracks, statuses):
         x1, y1, x2, y2 = (int(value) for value in track.bbox)
         color = (0, 0, 255)
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 3)
-        _draw_label(annotated, f"VIOLATION ID:{track.track_id}", x1, y1 - 5, color)
+        _draw_label(
+            annotated, f"VIOLATION {track.class_name} ID:{track.track_id}",
+            x1, y1 - 5, color,
+        )
     return annotated

@@ -30,9 +30,12 @@ def project_path(value):
 
 class AreaMonitoringPipeline:
     def __init__(self, config, video_path, zone_manager, run_id=None):
-        for key in ("violation", "dedup", "storage"):
+        for key in ("zones", "violation", "dedup", "storage"):
             if not isinstance(config.get(key), dict):
                 raise ValueError(f"Config must provide {key} mapping")
+        zone_manager.set_bbox_overlap_threshold(
+            config["zones"].get("bbox_overlap_threshold", 0.2)
+        )
         violation, dedup = (config[k] for k in ("violation", "dedup"))
         self.inside_frames = InsideFrameCounter()
         self.states = StateMachine(violation.get("min_inside_frames"), violation.get("exit_grace_sec"))
