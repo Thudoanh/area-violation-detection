@@ -11,7 +11,7 @@ import shutil
 import subprocess
 from collections import Counter
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import numpy as np
 import pandas as pd
@@ -21,6 +21,7 @@ from PIL import Image
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TARGET_NAMES = ["person", "bicycle", "car", "motorcycle", "bus", "truck"]
 CLASS_TO_ID = {name: index for index, name in enumerate(TARGET_NAMES)}
+PROJECT_TO_COCO_ID = {0: 0, 1: 1, 2: 2, 3: 3, 4: 5, 5: 7}
 CLASS_MAPPING = {
     "car": "car", "bus": "bus", "bicycle": "bicycle", "motorcycle": "motorcycle",
     "pedestrian": "person", "pickup_truck": "truck", "single_unit_truck": "truck",
@@ -243,7 +244,7 @@ def _normalize_manifest_image_ids(manifest: pd.DataFrame) -> pd.DataFrame:
     if "image_path" not in manifest.columns:
         raise ValueError("Split manifest must contain image_path.")
     normalized = manifest.copy()
-    normalized["image_id"] = normalized["image_path"].map(lambda value: Path(str(value)).stem)
+    normalized["image_id"] = normalized["image_path"].map(lambda value: PureWindowsPath(str(value)).stem)
     if normalized.image_id.eq("").any() or not normalized.image_id.is_unique:
         raise ValueError("Cannot recover unique image IDs from split manifest image paths.")
     return normalized
@@ -317,12 +318,61 @@ def validate_yolo(manifest: pd.DataFrame, label_root: Path) -> None:
                 raise ValueError(f"Out-of-range YOLO bbox: {label}")
 
 
+def prepare_coco_baseline_eval(manifest: pd.DataFrame, yolo_root: Path, model_names: dict,
+                               force=False) -> Path:
+    """Remap six-class labels to native COCO IDs for valid pretrained evaluation."""
+    manifest = _normalize_manifest_image_ids(manifest)
+    test_manifest = manifest.loc[manifest.split.eq("test")].copy()
+    if test_manifest.empty:
+        raise ValueError("Frozen test split is empty.")
+    root = PROJECT_ROOT / "data" / "mio_tcd" / "yolo_coco_baseline"
+    yaml_path = root / "mio_tcd_coco_eval.yaml"
+    label_root = root / "labels" / "test"
+    if yaml_path.is_file() and label_root.is_dir() and not force:
+        return yaml_path
+    if force and root.exists():
+        _remove_generated_path(root)
+    label_root.mkdir(parents=True, exist_ok=True)
+    image_view = root / "images" / "test"
+    source_dir = Path(test_manifest.iloc[0].image_path).parent
+    directory_view = _create_directory_view(source_dir, image_view, force=True)
+    references = []
+    from tqdm.auto import tqdm
+    for record in tqdm(test_manifest.itertuples(index=False), total=len(test_manifest),
+                       desc="Preparing COCO-ID baseline labels"):
+        source_image = Path(record.image_path)
+        reference = image_view / source_image.name
+        if not directory_view:
+            _create_hardlink(source_image, reference)
+        references.append(str(reference.absolute()))
+        source_label = yolo_root / "labels" / "test" / f"{record.image_id}.txt"
+        if not source_label.is_file():
+            raise FileNotFoundError(source_label)
+        converted = []
+        for line in source_label.read_text(encoding="utf-8").splitlines():
+            fields = line.split()
+            if len(fields) != 5 or int(fields[0]) not in PROJECT_TO_COCO_ID:
+                raise ValueError(f"Invalid project-class label: {source_label}")
+            converted.append(" ".join([str(PROJECT_TO_COCO_ID[int(fields[0])]), *fields[1:]]))
+        (label_root / f"{record.image_id}.txt").write_text(
+            "\n".join(converted) + ("\n" if converted else ""), encoding="utf-8")
+    test_list = root / "test.txt"
+    test_list.write_text("\n".join(references) + "\n", encoding="utf-8")
+    config = {"path": str(PROJECT_ROOT), "test": str(test_list.absolute()),
+              "names": {int(index): name for index, name in model_names.items()}}
+    yaml_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    return yaml_path
+
+
 def metric_tables(results, model_name: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     box = results.box
     overall = pd.DataFrame([{"model": model_name, "precision": float(box.mp), "recall": float(box.mr),
                              "mAP50": float(box.map50), "mAP50-95": float(box.map),
                              "latency_ms": float(sum(getattr(results, "speed", {}).values()))}])
-    ap50 = np.asarray(box.ap50); ap = np.asarray(box.ap)
-    per = pd.DataFrame({"class": TARGET_NAMES, "precision": np.asarray(box.p), "recall": np.asarray(box.r),
-                        "mAP50": ap50, "mAP50-95": ap})
+    class_ids = [int(value) for value in box.ap_class_index]
+    names = {int(index): name for index, name in results.names.items()}
+    per = pd.DataFrame({"class": [names[index] for index in class_ids],
+                        "precision": np.asarray(box.p), "recall": np.asarray(box.r),
+                        "mAP50": np.asarray(box.ap50), "mAP50-95": np.asarray(box.ap)})
+    per = per.loc[per["class"].isin(TARGET_NAMES)].set_index("class").reindex(TARGET_NAMES).reset_index()
     return overall, per
