@@ -329,7 +329,13 @@ def prepare_coco_baseline_eval(manifest: pd.DataFrame, yolo_root: Path, model_na
     yaml_path = root / "mio_tcd_coco_eval.yaml"
     label_root = root / "labels" / "test"
     if yaml_path.is_file() and label_root.is_dir() and not force:
-        return yaml_path
+        test_list = root / "test.txt"
+        if test_list.is_file():
+            config = {"path": str(PROJECT_ROOT), "train": str(test_list.absolute()),
+                      "val": str(test_list.absolute()), "test": str(test_list.absolute()),
+                      "names": {int(index): name for index, name in model_names.items()}}
+            yaml_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+            return yaml_path
     if force and root.exists():
         _remove_generated_path(root)
     label_root.mkdir(parents=True, exist_ok=True)
@@ -358,7 +364,8 @@ def prepare_coco_baseline_eval(manifest: pd.DataFrame, yolo_root: Path, model_na
             "\n".join(converted) + ("\n" if converted else ""), encoding="utf-8")
     test_list = root / "test.txt"
     test_list.write_text("\n".join(references) + "\n", encoding="utf-8")
-    config = {"path": str(PROJECT_ROOT), "test": str(test_list.absolute()),
+    config = {"path": str(PROJECT_ROOT), "train": str(test_list.absolute()),
+              "val": str(test_list.absolute()), "test": str(test_list.absolute()),
               "names": {int(index): name for index, name in model_names.items()}}
     yaml_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     return yaml_path
